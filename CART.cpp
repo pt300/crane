@@ -1,16 +1,19 @@
 #include <arduino.h>
 #include "CART.h"
 
-#define DEBUG
 #include "debug.h"
 
-CART::CART(MOTOR& motor) : motor(motor), left_side(0), right_side(1) { }
+#define PINRIGHT PIO_PC23 //7
+#define PINLEFT PIO_PC24 //6
+
+CART::CART(MOTOR& motor, float length) :  rail_length(length / 2.0), rail_limit(rail_length * 0.8), motor(motor), left_side(0), right_side(1) { }
 
 void CART::begin() {
   pmc_set_writeprotect(false);
 
   pmc_enable_periph_clk(ID_TC6);
   pmc_enable_periph_clk(ID_TC7);
+  pmc_enable_periph_clk(ID_PIOC);
 
   /* 
    * 36.6.14.1
@@ -47,14 +50,19 @@ void CART::begin() {
  * POSEN: Enables the position measure on channel 0 and 1
  * QDTRAN: Quadrature decoding logic is inactive (direction change inactive) but input filtering and edge detection are performed
  * EDGPHA: Edges are detected on both PHA and PHB
+ * MAXFILT: Pulses with a period shorter than MAXFILT+1 peripheral clock cycles are discarded.
+ * SWAP: Swap PHA and PHB
  */
-  TC2->TC_BMR = TC_BMR_EDGPHA | /*TC_BMR_QDTRANS | */TC_BMR_POSEN | TC_BMR_QDEN;
+  TC2->TC_BMR = TC_BMR_EDGPHA | TC_BMR_SWAP | TC_BMR_POSEN | TC_BMR_QDEN | (0b111111 << 20);
 
   TC_Start(TC2, 0);
   TC_Start(TC2, 1);
-  
-  pinMode(6, INPUT_PULLUP);
-  pinMode(7, INPUT_PULLUP);
+
+  /*
+   * Enable debounce to eliminate problems from H bridge causing interference
+   */
+  PIO_Configure(PIOC, PIO_INPUT, PINLEFT | PINRIGHT, PIO_PULLUP | PIO_DEBOUNCE);
+  PIO_SetDebounceFilter(PIOC, PINLEFT | PINRIGHT, 100);
 
   DMSGLN("[CART] begin()");
 }
@@ -64,16 +72,16 @@ int32_t CART::read_raw() {
 }
 
 float CART::read() {
-  float out = read_raw() - left_side;
+  float out = read_raw() * 2 - left_side - right_side; //center
   out /= right_side - left_side;
-  out = (out * 2) - 1;
+  out = out * rail_length;
 
   return out;
 }
 
 void CART::calibrate(float slow, float fast) {
   DMSGLN("[CART] Looking for left edge");
-  
+
   reach(slow, fast, LEFT);
   left_side = read_raw();
   DMSGLN("[CART] Left edge at: " + left_side);
@@ -83,6 +91,7 @@ void CART::calibrate(float slow, float fast) {
   reach(slow, fast, RIGHT);
   right_side = read_raw();
   DMSGLN("[CART] Right edge at: " + right_side);
+  DMSGLN("[CART] Rail size in steps: " + (right_side - left_side));
   
   DMSGLN("[CART] Moving off the switch");
   motor.write_voltage(-slow);
@@ -92,18 +101,31 @@ void CART::calibrate(float slow, float fast) {
   
 }
 
-void CART::move_to(float position, float P) {
-  position = constrain(position, -1, 1);
-  P = -1 * abs(P); //make sure we will go the right way
+bool CART::move_to(float position, float P) {
+  position = constrain(position, (-rail_limit), (rail_limit));
+  P = abs(P); //make sure we will go the right way
   float current = read();
+  float error = position - current;
+  bool edge = false;
   
-  while(abs(position - current) >= 0.001 &&
-        digitalRead(6) == LOW &&
-        digitalRead(7) == LOW) {
+  while(abs(error) >= 0.01 &&
+        !edge) {
     current = read();
-    motor.write_voltage(current * P);
+    error = position - current;
+    edge = edge_hit();
+    motor.write_voltage(constrain(error * P, -10.0, 10.0));
   }
   motor.write_voltage(0);
+
+  return edge;
+}
+/*
+bool CART::move_to(float position) {
+  return move_to(position, 50.0 * 9.0 / motor.max_voltage);
+}*/
+
+bool CART::edge_hit() {
+  return digitalRead(6) == HIGH || digitalRead(7) == HIGH;
 }
 
 /*

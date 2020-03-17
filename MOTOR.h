@@ -3,9 +3,9 @@
 
 class MOTOR {
 public:
-  MOTOR();
+  MOTOR(float voltage = 9.0);
   /*
-   * Sets up channel 0 of TC0 to PWM mode. 15kHz
+   * Sets up channel 0 of TC0 to PWM mode. 5kHz
    * DIR on pin 2
    * OUT on pin 3
    */
@@ -19,6 +19,18 @@ public:
    * Takes voltage fraction from -1 to 1
    */
   void write_voltage(float voltage);
+  /*
+   * Enables or disables driver output
+   */
+  void enable(bool e);
+  /*
+   * Max voltage coming from power supply
+   */
+  float voltage_max;
+  /*
+   * Limit voltage
+   */
+  float voltage_limit;
 };
 
 #endif
