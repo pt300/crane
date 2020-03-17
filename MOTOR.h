@@ -5,7 +5,7 @@ class MOTOR {
 public:
   MOTOR(float voltage = 9.0);
   /*
-   * Sets up channel 0 of TC0 to PWM mode. 5kHz
+   * Sets up channel 0 of TC0 to PWM mode. 15kHz
    * DIR on pin 2
    * OUT on pin 3
    */

@@ -14,7 +14,7 @@ CART Cart(Motor);
 PENDULUM Pendulum;
 
 
-#define VAR(a) {#a, a}
+#define VAR(a) {#a, &a}
 
 /// !!! Modify code here !!!
 // Changeable variables
@@ -37,7 +37,7 @@ float controller(float angle, float position, float target) {
 struct Sample {
   uint32_t time;
   float angle, position, voltage;
-};
+} __attribute__((packed));
 
 volatile float target = 0;
 volatile bool controller_enabled = false;
@@ -70,12 +70,7 @@ void call_controller() {
 
 #define SER SerialUSB
 
-struct Msg {
-  char head[3];
-  Sample samp;
-};
-
-Msg *send_buf;
+char *send_buf;
 int send_buf_size;
 int send_buf_elem_size;
 int send_buf_index;
@@ -90,10 +85,10 @@ void setup() {
   Motor.begin();
   Pendulum.begin();
 
-  send_buf_elem_size = sizeof *send_buf;
+  send_buf_elem_size = sizeof (Sample) + 3;
   send_buf_size = SER.availableForWrite() / send_buf_elem_size;
 //  assert(send_buf_size > 1);
-  send_buf = (Msg *) malloc(send_buf_elem_size * send_buf_size);
+  send_buf = new char[send_buf_elem_size * send_buf_size];
   send_buf_index = 0;
  
   delay(2000);
@@ -117,10 +112,11 @@ void loop() {
 
   // Load send buffer with new samples as long as there's space and samples
   while(buf.pop(samp) && send_buf_index != send_buf_size) {
-    char head[] = {'S', 'T','R'};
-    memcpy(send_buf[send_buf_index].head, head, 3);
-    send_buf[send_buf_index].samp = samp;
-    send_buf_index++;
+    //char head[] = {'S', 'T','R'};
+    memcpy(&send_buf[send_buf_index], "STR", 3);
+    send_buf_index += 3;
+    memcpy(&send_buf[send_buf_index], &samp, sizeof samp);
+    send_buf_index += sizeof samp;
 //    SER.write("STR");
 //    SER.write((char *)&samp, sizeof samp);
   }
@@ -128,10 +124,10 @@ void loop() {
   // if buffer is full or time since last samples was too long send the buffer
   // this part can lock if the previous buffer is still being sent, will result
   // in samples being dropped on ring buffer
-  // Timeout is kept on even if stream is on, nothing is sent if there's no data
-  // but it lets flush data from buffer at the end of stream
-  if(send_buf_index == send_buf_size || (send_timeout.isExpired() && send_buf_index != 0)) {
-    int bytes = send_buf_index * send_buf_elem_size;
+  if((send_buf_index == (send_buf_size * send_buf_elem_size) ||
+      (send_timeout.isExpired() && send_buf_index != 0)) &&
+      stream_enabled) {
+    int bytes = send_buf_index;
     send_buf_index = 0;
 
     SER.write((char *) send_buf, bytes);
@@ -251,7 +247,7 @@ void loop() {
           byte cur_size = cur.length();
           SER.write((char *)&cur_size, 1);
           SER.write(cur.c_str(), cur_size);
-          SER.write((char *)&vars.values[i], 4);
+          SER.write((char *)vars.values[i], 4);
         }
       }
     default:

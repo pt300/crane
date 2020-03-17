@@ -6,7 +6,8 @@
 
 class VarKV {
 public:
-  VarKV(std::initializer_list<std::pair<String, float&>> init);
+  VarKV(std::initializer_list<std::pair<String, float*>> init);
+  ~VarKV();
   bool update(String& name, float value);
   
   const int size;

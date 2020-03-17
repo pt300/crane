@@ -1,16 +1,24 @@
 #include <arduino.h>
 #include "VarKV.h"
 
-VarKV::VarKV(std::initializer_list<std::pair<String, float&>> init) : size(init.size()) {
-  keys = (String *)malloc(size * sizeof *keys);
-  values = (float* *)malloc(size * sizeof *values);
+VarKV::VarKV(std::initializer_list<std::pair<String, float*>> init) : size(init.size()) {
+  keys = new String[size];
+  values = new float*[size];
 
   int i = 0;
-  for(auto& n : init) {
+//  for(auto it = init.begin(); it != init.end(); ++it) {
+    //pass
+//  }
+  for(auto n : init) {
     keys[i] = n.first;
-    values[i] = &n.second;
+    values[i] = n.second;
     ++i;
   }
+}
+
+VarKV::~VarKV() {
+  delete keys;
+  delete values;
 }
 
 bool VarKV::update(String& name, float value) {
