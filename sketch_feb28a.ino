@@ -229,13 +229,15 @@ void loop() {
         if(len > 50 || len < 0)
           break;
           
-        SER.readBytes(name, len);
-        name[len + 1] = '\0';
+        if(SER.readBytes(name, len) != len)
+          break;
+        name[len] = 0;
 
         GETFLOAT(value);
         
         String tmp(name);
-        vars.update(tmp, value);
+        if(!vars.update(tmp, value))
+          break;
         RESPOND;
       }
       else if(c == 'L' && !stream_enabled) {

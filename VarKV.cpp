@@ -6,9 +6,6 @@ VarKV::VarKV(std::initializer_list<std::pair<String, float*>> init) : size(init.
   values = new float*[size];
 
   int i = 0;
-//  for(auto it = init.begin(); it != init.end(); ++it) {
-    //pass
-//  }
   for(auto n : init) {
     keys[i] = n.first;
     values[i] = n.second;
@@ -22,9 +19,8 @@ VarKV::~VarKV() {
 }
 
 bool VarKV::update(String& name, float value) {
-
   for(int i = 0; i < size; i++) {
-    if(name.compareTo(keys[i]) == 0) {
+    if(name == keys[i]) {
       *values[i] = value;
       return true;
     }

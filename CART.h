@@ -32,7 +32,7 @@ public:
    * positioning on switch. Low enough to not ram into end, high
    * enough to overcome static friction.
    */
-  void calibrate(float slow = 3, float fast = 5.5);
+  void calibrate(float slow = 3.5, float fast = 5.5);
   /*
    * Tries to move cart to requested position
    * uses proportional controller with optional given Kp
