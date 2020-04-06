@@ -6,7 +6,7 @@
 #define PINRIGHT PIO_PC23 //7
 #define PINLEFT PIO_PC24 //6
 
-CART::CART(MOTOR& motor, float length) :  rail_length(length / 2.0), rail_limit(rail_length * 0.8), motor(motor), left_side(0), right_side(1) { }
+CART::CART(MOTOR& motor, float length) :  rail_length(length / 2.0), rail_limit(rail_length * 0.9), motor(motor), left_side(0), right_side(1) { }
 
 void CART::begin() {
   pmc_set_writeprotect(false);

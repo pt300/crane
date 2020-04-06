@@ -6,11 +6,13 @@
 #include "PENDULUM.h"
 #include "CART.h"
 #include "VarKV.h"
+#include "PIDF.h"
+#include "Butter1.h"
 
 #define FSAMP 100
 
 MOTOR Motor(20.0);
-CART Cart(Motor);
+CART Cart(Motor, 1.14);
 PENDULUM Pendulum;
 
 
@@ -18,19 +20,60 @@ PENDULUM Pendulum;
 
 /// !!! Modify code here !!!
 // Changeable variables
-float P = 200;
+float pendulum_length = 0.25;
+
+Butter1 filt1(5, FSAMP);
+PIDF pid1(1, 0, 0, 20, filt1, FSAMP);
+
+float Pp = 100;
+float Ip = 0;
+float Dp = 0.5;
+float Ap = 0;
+  
+float Pc = 0;
+float Ic = 0;
+float Dc = 0;
+float Ac = 0;
 
 VarKV vars({
-  VAR(P)
+  VAR(pendulum_length),
+  VAR(Pp),VAR(Ip),VAR(Dp),VAR(Ap),
+  VAR(Pc),VAR(Ic),VAR(Dc),VAR(Ac),
+  {"Kp_pendulum", &pid1.Kp}, {"Ki_pendulum", &pid1.Ki}, {"Kd_pendulum", &pid1.Kd}, {"Cf_pendulum", &pid1.filt.cutoff} 
   });
 
 /// Controller
-float controller(float angle, float position, float target) {
-  float error;
+/*
+ * angle: of pendulum in radians from resting position
+ * position: of the load on the rail in meters
+ * target: current position target
+ * period: controller period
+ * 
+ * returns: voltage input to motor
+ */
+float controller(float angle, float position, float target, float frequency) {
+  static float Ep_int = 0;
+  static float Ep_1 = 0;
+  static float Ec_int = 0;
+  static float Ec_1 = 0;
+
+//  angle += PI;
+//  if(angle > PI)
+//    angle -= 2*PI;
+ 
+  float Ep = -angle;
+  float Ec = target - position;
+
+  Ep_int = Ep_int + Ep/frequency;
+  Ec_int = Ec_int + Ec/frequency;
   
-  error = target - position;
+  float Cp = Ep * Pp + Ip*(Ep_int - Ap*0) + Dp*(Ep-Ep_1)*frequency;
+  float Cc = Ec * Pc + Ic*(Ec_int - Ac*0) + Dc*(Ec-Ec_1)*frequency;
+
+  Ep_1 = Ep;
+  Ec_1 = Ec;
   
-  return error * P;
+  return Cc + Cp; 
 }
 ///
 
@@ -49,15 +92,15 @@ void call_controller() {
   float voltage = 0;
 //  float f = 0.1; //float f = 1.0954;
   float angle = Pendulum.read();
-  float position = Cart.read();
-
-  if(abs(position) > Cart.rail_limit) { //add switch interrupt 
+  float position = Cart.read();  
+  
+  if(abs(position) > Cart.rail_limit) { //add switch interrupt?
     controller_enabled = false;
     Motor.write_voltage(0);
   }
 
   //target = sin( millis() / 1000.0 * f * 2 * PI) * 0.4;
-  voltage = controller(angle, position, target);
+  voltage = controller(angle, position - pendulum_length * sin(angle), target, Timer2.getFrequency());
   
   if(stream_enabled)
     buf.push({micros(), angle, position, voltage});
@@ -65,7 +108,7 @@ void call_controller() {
   if(controller_enabled == false)
     return;
   
-  Motor.write_voltage(constrain(voltage, -10.0, 10.0));
+  Motor.write_voltage(voltage);
 }
 
 #define SER SerialUSB
@@ -252,6 +295,17 @@ void loop() {
           SER.write((char *)vars.values[i], 4);
         }
       }
+      break;
+    case 'Q':
+      GETCHAR(c);
+      if(c == 'C') {
+        RESPOND;
+        SER.write((char *)&Cart.rail_length, 4);
+      }
+      else if(c == 'V')   {
+        RESPOND;
+        SER.write((char *)&Motor.voltage_max, 4);
+      }
     default:
     //ignore
       break;
@@ -278,4 +332,6 @@ void loop() {
  * P(), ping-pong
  * KS(byte str_len, char[str_len] name, float value), set variable `name` to value `value`
  * KL(), list variables; response: RES, num_values, [str_len, name, value_single]
+ * QC(), get programmed half rail length
+ * QV(), get programmed max voltage
  */
