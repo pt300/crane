@@ -9,7 +9,7 @@ void Butter1::reset() {
     xd1 = 0;
     yd1 = 0;
 
-    float A = 1 / tan(cutoff * pi / frequency);
+    float A = 1 / tan(cutoff * PI / frequency);
     cx = 1 / (A + 1);
     cy = (A - 1) / (A + 1);
 }

@@ -15,32 +15,26 @@ MOTOR Motor(20.0);
 CART Cart(Motor, 1.14);
 PENDULUM Pendulum;
 
-
+#define UNUSED(a)
 #define VAR(a) {#a, &a}
 
 /// !!! Modify code here !!!
-// Changeable variables
 float pendulum_length = 0.25;
 
 Butter1 filt1(5, FSAMP);
 PIDF pid1(1, 0, 0, 20, filt1, FSAMP);
+Butter1 filt2(5, FSAMP);
+PIDF pid2(1, 0, 0, 20, filt2, FSAMP);
 
-float Pp = 100;
-float Ip = 0;
-float Dp = 0.5;
-float Ap = 0;
-  
-float Pc = 0;
-float Ic = 0;
-float Dc = 0;
-float Ac = 0;
-
+//add controllable variables here {"name_string", pointer_to_variable}
 VarKV vars({
   VAR(pendulum_length),
-  VAR(Pp),VAR(Ip),VAR(Dp),VAR(Ap),
-  VAR(Pc),VAR(Ic),VAR(Dc),VAR(Ac),
-  {"Kp_pendulum", &pid1.Kp}, {"Ki_pendulum", &pid1.Ki}, {"Kd_pendulum", &pid1.Kd}, {"Cf_pendulum", &pid1.filt.cutoff} 
+  {"Kp_angle", &pid1.Kp}, {"Ki_angle", &pid1.Ki}, {"Kd_angle", &pid1.Kd}, {"Cf_angle", &pid1.filt.cutoff},
+  {"Kp_pos", &pid2.Kp}, {"Ki_pos", &pid2.Ki}, {"Kd_pos", &pid2.Kd}, {"Cf_pos", &pid2.filt.cutoff} 
   });
+
+//add pointers to PIDs here to reset on variable change and update frequency
+PIDF* pids[] = { &pid1, &pid2 };
 
 /// Controller
 /*
@@ -51,29 +45,14 @@ VarKV vars({
  * 
  * returns: voltage input to motor
  */
-float controller(float angle, float position, float target, float frequency) {
-  static float Ep_int = 0;
-  static float Ep_1 = 0;
-  static float Ec_int = 0;
-  static float Ec_1 = 0;
+float controller(float angle, float position, float target, float /*frequency*/) {
+  float Ea = -angle;
+  float Ep = target - position;
 
-//  angle += PI;
-//  if(angle > PI)
-//    angle -= 2*PI;
- 
-  float Ep = -angle;
-  float Ec = target - position;
+  float out = pid1.process(Ea) + pid2.process(Ep);
 
-  Ep_int = Ep_int + Ep/frequency;
-  Ec_int = Ec_int + Ec/frequency;
   
-  float Cp = Ep * Pp + Ip*(Ep_int - Ap*0) + Dp*(Ep-Ep_1)*frequency;
-  float Cc = Ec * Pc + Ic*(Ec_int - Ac*0) + Dc*(Ec-Ec_1)*frequency;
-
-  Ep_1 = Ep;
-  Ec_1 = Ec;
-  
-  return Cc + Cp; 
+  return out;
 }
 ///
 
@@ -90,7 +69,6 @@ RingBuf<Sample, 50> buf;
 
 void call_controller() {
   float voltage = 0;
-//  float f = 0.1; //float f = 1.0954;
   float angle = Pendulum.read();
   float position = Cart.read();  
   
@@ -99,7 +77,6 @@ void call_controller() {
     Motor.write_voltage(0);
   }
 
-  //target = sin( millis() / 1000.0 * f * 2 * PI) * 0.4;
   voltage = controller(angle, position - pendulum_length * sin(angle), target, Timer2.getFrequency());
   
   if(stream_enabled)
@@ -254,7 +231,14 @@ void loop() {
     case 'F':
       float freq;
       GETFLOAT(freq);
-      Timer2.stop().setFrequency(constrain(freq, 1, 5000)).start();
+      freq = constrain(freq, 1, 5000);
+      Timer2.stop().setFrequency(freq);
+      for(auto i : pids) {
+        i->frequency = freq;
+        i->reset();
+      }
+      Timer2.start();
+      
       RESPOND;
       break;
     //ping
@@ -281,6 +265,11 @@ void loop() {
         String tmp(name);
         if(!vars.update(tmp, value))
           break;
+
+        for(auto i : pids) {
+          i->reset();
+        }
+        
         RESPOND;
       }
       else if(c == 'L' && !stream_enabled) {
@@ -314,10 +303,10 @@ void loop() {
 
 /*
  * Interface:
- * packet:
- * "REQ",command,params
- * "RES"
- * "STR",pendulum(float), cart(float)
+ * packets:
+ * "REQ",command,params //request
+ * "RES"  //response
+ * "STR",pendulum(float), cart(float) //stream data
  * commands:
  * CB(), start controller
  * CE(), stop controller

@@ -3,6 +3,10 @@
 
 #include "Filter.h"
 
+/*
+ * First order butterworth lowpass filter
+ */
+
 class Butter1 : public Filter {
 public:
   Butter1(float frequency, float cutoff);
