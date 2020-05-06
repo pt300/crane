@@ -17,24 +17,29 @@ PENDULUM Pendulum;
 
 #define UNUSED(a)
 #define VAR(a) {#a, &a}
+#define VAR_PID(a) {"Kp_" #a, &a.Kp}, {"Ki_" #a, &a.Ki}, {"Kd_" #a, &a.Kd}, {"Cf_" #a, &a.filt.cutoff}
 
 /// !!! Modify code here !!!
 float pendulum_length = 0.25;
 
 Butter1 filt1(5, FSAMP);
-PIDF pid1(1, 0, 0, 20, filt1, FSAMP);
+PIDF pid_cart(21, 0, 0, 20, filt1, FSAMP);
 Butter1 filt2(5, FSAMP);
-PIDF pid2(1, 0, 0, 20, filt2, FSAMP);
+PIDF pid_pendulum(48, 0, 0, 20, filt2, FSAMP);
+
+//float test = 0.0;
+//float start = 0.0;
 
 //add controllable variables here {"name_string", pointer_to_variable}
 VarKV vars({
-  VAR(pendulum_length),
-  {"Kp_angle", &pid1.Kp}, {"Ki_angle", &pid1.Ki}, {"Kd_angle", &pid1.Kd}, {"Cf_angle", &pid1.filt.cutoff},
-  {"Kp_pos", &pid2.Kp}, {"Ki_pos", &pid2.Ki}, {"Kd_pos", &pid2.Kd}, {"Cf_pos", &pid2.filt.cutoff} 
+  VAR(pendulum_length),// VAR(test), VAR(start),
+  VAR_PID(pid_cart), VAR_PID(pid_pendulum)
+  //{"Kp_angle", &pid1.Kp}, {"Ki_angle", &pid1.Ki}, {"Kd_angle", &pid1.Kd}, {"Cf_angle", &pid1.filt.cutoff},
+  //{"Kp_pos", &pid2.Kp}, {"Ki_pos", &pid2.Ki}, {"Kd_pos", &pid2.Kd}, {"Cf_pos", &pid2.filt.cutoff} 
   });
 
 //add pointers to PIDs here to reset on variable change and update frequency
-PIDF* pids[] = { &pid1, &pid2 };
+PIDF* pids[] = { &pid_cart, &pid_pendulum };
 
 /// Controller
 /*
@@ -46,12 +51,32 @@ PIDF* pids[] = { &pid1, &pid2 };
  * returns: voltage input to motor
  */
 float controller(float angle, float position, float target, float /*frequency*/) {
-  float Ea = -angle;
-  float Ep = target - position;
+  float E_pendulum = -angle;
+  float E_cart = target - position;
 
-  float out = pid1.process(Ea) + pid2.process(Ep);
-
-  
+  float out = pid_cart.process(E_cart) + pid_pendulum.process(E_pendulum);
+/*
+  if(test == 1.0){
+    if(start == 0) start = millis();
+    out = (millis() > (start + 4000)) ? 0 : 5;
+  }
+  else if(test == 2.0){
+    if(start == 0) start = millis();
+    out = (millis() > (start + 4000)) ? 0 : -5;
+  }
+  else if(test == 3.0){
+    if(start == 0) start = millis();
+    out = (millis() > (start + 2300)) ? 0 : 10;
+  }
+  else if(test == 4.0){
+    if(start == 0) start = millis();
+    out = (millis() > (start + 2300)) ? 0 : -10;
+  }
+  else if(test == 5.0){
+    if(start == 0) start = millis();
+    out = (millis() > (start + 250)) ? 0 : 20;
+  }
+  */
   return out;
 }
 ///
@@ -77,7 +102,7 @@ void call_controller() {
     Motor.write_voltage(0);
   }
 
-  voltage = controller(angle, position - pendulum_length * sin(angle), target, Timer2.getFrequency());
+  voltage = controller(angle, position/* - pendulum_length * sin(angle)*/, target, Timer2.getFrequency());
   
   if(stream_enabled)
     buf.push({micros(), angle, position, voltage});
