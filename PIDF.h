@@ -4,20 +4,21 @@
 #include "Filter.h"
 
 /*
- * PIDF controller with intgral anti-windup
+ * PIDF controller with integral anti-windup
  */
 
 class PIDF {
 public:
   /*
    * Kp, Ki, Kd - Gain of proporitonal, integral and derivative terms of PIDF
+   * Kd - backcalculation anti-windup gain
    * saturation - Saturation for integral anti-windup
    * frequency - Sampling frequency
    */
-  float Kp, Ki, Kd, saturation, frequency;
+  float Kp, Ki, Kd, Kb, saturation, frequency;
   Filter& filt;
   
-  PIDF(float Kp, float Ki, float Kd, float saturation, Filter& filt, float frequency);
+  PIDF(float Kp, float Ki, float Kd, float Kb, float saturation, Filter& filt, float frequency);
 
   /*
    * Resets memory to 0 and resets the filter
@@ -34,9 +35,12 @@ private:
    */
   float xd, xdf; //x[n - 1] and filt{x[n - 1]}
   /*
+   * PIDF output delayed by 1
+   */
+  float yd;
+  /*
    * Current integral value
    */
   float integral;
 };
-
 #endif

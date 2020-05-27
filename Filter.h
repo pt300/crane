@@ -20,7 +20,7 @@ public:
    */
   virtual void reset() = 0;
   /*
-   * Passes a single sampel through the filter
+   * Passes a single sample through the filter
    * Returns the result of filtering
    */
   virtual float process(float sample) = 0;

@@ -14,8 +14,8 @@ VarKV::VarKV(std::initializer_list<std::pair<String, float*>> init) : size(init.
 }
 
 VarKV::~VarKV() {
-  delete keys;
-  delete values;
+  delete[] keys;
+  delete[] values;
 }
 
 bool VarKV::update(String& name, float value) {

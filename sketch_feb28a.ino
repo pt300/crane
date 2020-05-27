@@ -17,25 +17,29 @@ PENDULUM Pendulum;
 
 #define UNUSED(a)
 #define VAR(a) {#a, &a}
-#define VAR_PID(a) {"Kp_" #a, &a.Kp}, {"Ki_" #a, &a.Ki}, {"Kd_" #a, &a.Kd}, {"Cf_" #a, &a.filt.cutoff}
+#define VAR_PID(a) {"Kp_" #a, &a.Kp}, {"Ki_" #a, &a.Ki}, {"Kd_" #a, &a.Kd}, {"sat_" #a, &a.saturation}, {"Kb_" #a, &a.Kb}, {"Cf_" #a, &a.filt.cutoff}
 
 /// !!! Modify code here !!!
 float pendulum_length = 0.25;
 
 Butter1 filt1(5, FSAMP);
-PIDF pid_cart(21, 0, 0, 20, filt1, FSAMP);
+PIDF pid_cart(50, 0, 0, 0, 20, filt1, FSAMP);
 Butter1 filt2(5, FSAMP);
-PIDF pid_pendulum(48, 0, 0, 20, filt2, FSAMP);
+PIDF pid_pendulum(60, 0, 0, 0, 20, filt2, FSAMP);
 
 //float test = 0.0;
 //float start = 0.0;
+//float tfreq = 0.5;
+//float tamp = 0.1;
+
+float lim_pend = 20;
+float lim_cart = 20;
 
 //add controllable variables here {"name_string", pointer_to_variable}
 VarKV vars({
-  VAR(pendulum_length),// VAR(test), VAR(start),
+  //VAR(pendulum_length), VAR(test), VAR(start), VAR(tfreq), VAR(tamp),
+  VAR(lim_pend), VAR(lim_cart),
   VAR_PID(pid_cart), VAR_PID(pid_pendulum)
-  //{"Kp_angle", &pid1.Kp}, {"Ki_angle", &pid1.Ki}, {"Kd_angle", &pid1.Kd}, {"Cf_angle", &pid1.filt.cutoff},
-  //{"Kp_pos", &pid2.Kp}, {"Ki_pos", &pid2.Ki}, {"Kd_pos", &pid2.Kd}, {"Cf_pos", &pid2.filt.cutoff} 
   });
 
 //add pointers to PIDs here to reset on variable change and update frequency
@@ -54,8 +58,14 @@ float controller(float angle, float position, float target, float /*frequency*/)
   float E_pendulum = -angle;
   float E_cart = target - position;
 
-  float out = pid_cart.process(E_cart) + pid_pendulum.process(E_pendulum);
-/*
+  float u_cart = pid_cart.process(E_cart);
+  float u_pend = pid_pendulum.process(E_pendulum);
+
+  u_cart = constrain(u_cart, -lim_cart, lim_cart);
+  u_pend = constrain(u_pend, -lim_pend, lim_pend);
+  
+  float out = u_cart + u_pend;
+/*float out = 0;
   if(test == 1.0){
     if(start == 0) start = millis();
     out = (millis() > (start + 4000)) ? 0 : 5;
@@ -76,7 +86,17 @@ float controller(float angle, float position, float target, float /*frequency*/)
     if(start == 0) start = millis();
     out = (millis() > (start + 250)) ? 0 : 20;
   }
-  */
+  else if(test == 6.0){
+    if(start == 0) start = millis();
+    float curr = millis();
+    curr -= start;
+    curr /= 1000;
+    curr *= 2*PI;
+    out = cos(curr * tfreq)*tamp;
+    if(curr*tfreq >= 5*2*PI) //only 5 cycles
+      out = 0;
+  }*/
+  
   return out;
 }
 ///
@@ -125,6 +145,7 @@ AsyncDelay send_timeout(20, AsyncDelay::MILLIS);
 
 void setup() {
   SER.begin(115200);
+  Serial.begin(115200); //debug
   SER.setTimeout(100);
   Cart.begin();
   Motor.begin();
@@ -202,6 +223,9 @@ void loop() {
       GETCHAR(c);
       if(c == 'B') {
         controller_enabled = true;
+        for(auto i : pids) {
+          i->reset();
+        }
         RESPOND;
       }
       else if(c == 'E') {
